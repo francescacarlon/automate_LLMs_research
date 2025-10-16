@@ -1,18 +1,27 @@
 import arxiv
 import pandas as pd
 import random
-import openai
+from openai import OpenAI
+from dotenv import load_dotenv
+import os
 import time
+
+load_dotenv()  # read .env file
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# print(os.getenv("OPENAI_API_KEY"))
 
 # ---- CONFIGURATION ----
 category = "cs.AI"
 years = range(2015, 2026)
-papers_per_year = 2
+papers_per_year = 2  # -> 22 total (2015–2025 inclusive)
 random.seed(42)  # reproducible random selection
-output_file = "arxiv_csAI_2015_2025_with_RQ.csv"
-openai.api_key = "YOUR_OPENAI_API_KEY"
+output_file = "arxiv_csAI_2015_2025_with_Abstract_RQ.csv"
 
 data = []
+
+# ---- TEST SETTINGS ----
+MAX_RQ_COUNT = 5  # ✅ Only generate RQs for first 2 papers
+rq_counter = 0    # to keep track of how many RQs were generated
 
 # ---- FUNCTION TO GENERATE RESEARCH QUESTION ----
 def generate_research_question(title, abstract):
@@ -25,16 +34,16 @@ Abstract: {abstract}
 Research Question:
 """
     try:
-        response = openai.ChatCompletion.create(
-            model="gpt-4",
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.2,  # factual
+            temperature=0.2,
             max_tokens=100
         )
-        rq = response['choices'][0]['message']['content'].strip()
+        rq = response.choices[0].message.content.strip()
         return rq
     except Exception as e:
-        print(f"Error generating RQ for {title}: {e}")
+        print(f"Error generating RQ for '{title}': {e}")
         return ""
 
 # ---- FETCH PAPERS ----
@@ -45,7 +54,7 @@ for year in years:
     try:
         search = arxiv.Search(
             query=query,
-            max_results=50,  # avoid empty pages
+            max_results=50,  # fetch some papers to choose from
             sort_by=arxiv.SortCriterion.SubmittedDate
         )
         papers = list(search.results())
@@ -57,21 +66,27 @@ for year in years:
         print(f"⚠️ No papers found for {year}")
         continue
 
-    # Randomly select papers_per_year papers
+    # Randomly select 2 papers per year
     selected = random.sample(papers, min(papers_per_year, len(papers)))
 
     for result in selected:
-        primary_cat = result.primary_category or ""  # always cs.AI
+        primary_cat = result.primary_category or ""
         main_field, _, sub_field = primary_cat.partition('.')
         title = result.title.strip()
         abstract = result.summary.replace("\n", " ").strip()
 
-        # Generate research question
-        rq = generate_research_question(title, abstract)
-        time.sleep(1)  # avoid rate limit
+        # ---- Only generate RQ for first two papers ----
+        if rq_counter < MAX_RQ_COUNT:
+            print(f"\n🔹 Generating RQ for paper {rq_counter + 1}: {title}")
+            rq = generate_research_question(title, abstract)
+            rq_counter += 1
+            time.sleep(1)
+        else:
+            rq = ""  # leave blank for others
 
         data.append({
             "Title": title,
+            "Abstract": abstract,
             "MainCategory": main_field,
             "SubCategory": sub_field,
             "Year": result.published.year,
@@ -84,5 +99,7 @@ df.insert(0, "RefNumber", range(1, len(df) + 1))
 
 # ---- SAVE CSV ----
 df.to_csv(output_file, index=False)
-print(f"\n✅ Collected {len(df)} papers with Research Questions. Saved to {output_file}")
-print(df)
+print(f"\n✅ Collected {len(df)} papers (22 expected).")
+print(f"🧠 Generated RQs for first {rq_counter} papers.")
+print(f"📄 Saved to {output_file}")
+print(df.head(5))
