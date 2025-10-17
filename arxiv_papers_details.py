@@ -20,7 +20,8 @@ output_file = "arxiv_csAI_2015_2025_with_Abstract_RQ.csv"
 data = []
 
 # ---- TEST SETTINGS ----
-MAX_RQ_COUNT = 5  # ✅ Only generate RQs for first 2 papers
+TEST_MODE = False
+MAX_RQ_COUNT = 5  # ✅ Only generate RQs for first n. papers
 rq_counter = 0    # to keep track of how many RQs were generated
 
 # ---- FUNCTION TO GENERATE RESEARCH QUESTION ----
@@ -75,14 +76,14 @@ for year in years:
         title = result.title.strip()
         abstract = result.summary.replace("\n", " ").strip()
 
-        # ---- Only generate RQ for first two papers ----
-        if rq_counter < MAX_RQ_COUNT:
+        # ---- Conditionally generate RQs ----
+        if (not TEST_MODE) or (rq_counter < MAX_RQ_COUNT):
             print(f"\n🔹 Generating RQ for paper {rq_counter + 1}: {title}")
             rq = generate_research_question(title, abstract)
             rq_counter += 1
             time.sleep(1)
         else:
-            rq = ""  # leave blank for others
+            rq = ""
 
         data.append({
             "Title": title,
@@ -99,7 +100,6 @@ df.insert(0, "RefNumber", range(1, len(df) + 1))
 
 # ---- SAVE CSV ----
 df.to_csv(output_file, index=False)
-print(f"\n✅ Collected {len(df)} papers (22 expected).")
-print(f"🧠 Generated RQs for first {rq_counter} papers.")
+print(f"\n✅ Collected {len(df)} papers.")
 print(f"📄 Saved to {output_file}")
 print(df.head(5))
