@@ -12,7 +12,7 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 # ---- CONFIGURATION ----
 category = "cs.AI"
 years = range(2015, 2026)
-papers_per_year = 5  # 🔼 You can safely increase this now
+papers_per_year = 6  # 🔼 You can safely increase this now
 random.seed(42)  # reproducible random selection
 output_file = "arxiv_csAI_2015_2025_with_Abstract_RQ.csv"
 
