@@ -8,21 +8,30 @@ import time
 
 load_dotenv()  # read .env file
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-# print(os.getenv("OPENAI_API_KEY"))
 
 # ---- CONFIGURATION ----
 category = "cs.AI"
 years = range(2015, 2026)
-papers_per_year = 2  # -> 22 total (2015–2025 inclusive)
+papers_per_year = 5  # 🔼 You can safely increase this now
 random.seed(42)  # reproducible random selection
 output_file = "arxiv_csAI_2015_2025_with_Abstract_RQ.csv"
-
-data = []
 
 # ---- TEST SETTINGS ----
 TEST_MODE = False
 MAX_RQ_COUNT = 5  # ✅ Only generate RQs for first n. papers
 rq_counter = 0    # to keep track of how many RQs were generated
+
+# ---- LOAD EXISTING DATA (if any) ----
+if os.path.exists(output_file):
+    df_existing = pd.read_csv(output_file)
+    existing_titles = set(df_existing["Title"].tolist())
+    print(f"📁 Loaded {len(df_existing)} existing papers from {output_file}")
+else:
+    df_existing = pd.DataFrame()
+    existing_titles = set()
+    print("🆕 No existing file found — starting fresh.")
+
+data = []
 
 # ---- FUNCTION TO GENERATE RESEARCH QUESTION ----
 def generate_research_question(title, abstract):
@@ -49,7 +58,7 @@ Research Question:
 
 # ---- FETCH PAPERS ----
 for year in years:
-    print(f"Fetching papers for {year}...")
+    print(f"\n📅 Fetching papers for {year}...")
     query = f"cat:{category} AND submittedDate:[{year}01010000 TO {year}12312359]"
 
     try:
@@ -67,13 +76,19 @@ for year in years:
         print(f"⚠️ No papers found for {year}")
         continue
 
-    # Randomly select 2 papers per year
+    # Randomly select n papers per year
     selected = random.sample(papers, min(papers_per_year, len(papers)))
 
     for result in selected:
+        title = result.title.strip()
+
+        # Skip if already fetched before
+        if title in existing_titles:
+            print(f"⏩ Skipping already saved paper: {title}")
+            continue
+
         primary_cat = result.primary_category or ""
         main_field, _, sub_field = primary_cat.partition('.')
-        title = result.title.strip()
         abstract = result.summary.replace("\n", " ").strip()
 
         # ---- Conditionally generate RQs ----
@@ -95,11 +110,23 @@ for year in years:
         })
 
 # ---- CREATE DATAFRAME ----
-df = pd.DataFrame(data)
-df.insert(0, "RefNumber", range(1, len(df) + 1))
+df_new = pd.DataFrame(data)
+if not df_new.empty:
+    df_combined = pd.concat([df_existing, df_new], ignore_index=True)
+else:
+    df_combined = df_existing.copy()
+
+df_combined.drop_duplicates(subset="Title", inplace=True)
+
+# ---- REASSIGN OR ADD RefNumber ----
+if "RefNumber" in df_combined.columns:
+    df_combined["RefNumber"] = range(1, len(df_combined) + 1)
+else:
+    df_combined.insert(0, "RefNumber", range(1, len(df_combined) + 1))
+
 
 # ---- SAVE CSV ----
-df.to_csv(output_file, index=False)
-print(f"\n✅ Collected {len(df)} papers.")
+df_combined.to_csv(output_file, index=False)
+print(f"\n✅ Total papers in dataset: {len(df_combined)}")
 print(f"📄 Saved to {output_file}")
-print(df.head(5))
+print(df_combined.tail(5))
